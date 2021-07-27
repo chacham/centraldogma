@@ -290,7 +290,8 @@ class WatchTest {
 
         final Watcher<String> stringWatcher = client.fileWatcher(dogma.project(), dogma.repo1(),
                                                                  Query.ofText("/test/test1.yml"));
-        assertThat(stringWatcher.awaitInitialValue().value()).isEqualTo("{\"a\":{\"b\":\"c\"}}");
+        assertThat(stringWatcher.awaitInitialValue().value()).isEqualTo("a:\n" +
+                                                                        "  b: \"c\"\n");
     }
 
     @ParameterizedTest
