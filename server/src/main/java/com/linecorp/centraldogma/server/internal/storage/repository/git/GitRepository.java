@@ -94,7 +94,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
@@ -114,7 +113,6 @@ import com.linecorp.centraldogma.common.Revision;
 import com.linecorp.centraldogma.common.RevisionNotFoundException;
 import com.linecorp.centraldogma.common.RevisionRange;
 import com.linecorp.centraldogma.internal.Jackson;
-import com.linecorp.centraldogma.internal.JacksonYaml;
 import com.linecorp.centraldogma.internal.Util;
 import com.linecorp.centraldogma.internal.jsonpatch.JsonPatch;
 import com.linecorp.centraldogma.internal.jsonpatch.ReplaceMode;
@@ -497,11 +495,11 @@ class GitRepository implements Repository {
                     final byte[] content = reader.open(treeWalk.getObjectId(0)).getBytes();
                     switch (entryType) {
                         case JSON:
-                            final JsonNode jsonNode = Jackson.readTree(content);
+                            final JsonNode jsonNode = Jackson.readTree(content, EntryType.JSON);
                             entry = Entry.ofJson(normRevision, path, jsonNode);
                             break;
                         case YAML:
-                            final JsonNode yamlNode = JacksonYaml.readTree(content);
+                            final JsonNode yamlNode = Jackson.readTree(content, EntryType.YAML);
                             entry = Entry.ofYaml(normRevision, path, yamlNode);
                             break;
                         case TEXT:
@@ -517,7 +515,7 @@ class GitRepository implements Repository {
                             entry = Entry.ofJson(normRevision, path, Jackson.nullNode);
                             break;
                         case YAML:
-                            entry = Entry.ofYaml(normRevision, path, JacksonYaml.nullNode);
+                            entry = Entry.ofYaml(normRevision, path, Jackson.nullNode);
                             break;
                         case TEXT:
                             entry = Entry.ofText(normRevision, path, "");
@@ -768,10 +766,12 @@ class GitRepository implements Repository {
 
                                 final JsonNode oldJsonNode =
                                         Jackson.readTree(
-                                                reader.open(diffEntry.getOldId().toObjectId()).getBytes());
+                                                reader.open(diffEntry.getOldId().toObjectId()).getBytes(),
+                                                EntryType.JSON);
                                 final JsonNode newJsonNode =
                                         Jackson.readTree(
-                                                reader.open(diffEntry.getNewId().toObjectId()).getBytes());
+                                                reader.open(diffEntry.getNewId().toObjectId()).getBytes(),
+                                                EntryType.JSON);
                                 patch = JsonPatch.generate(oldJsonNode, newJsonNode, ReplaceMode.SAFE);
 
                                 if (!patch.isEmpty()) {
@@ -785,11 +785,13 @@ class GitRepository implements Repository {
                                 }
 
                                 final JsonNode oldYamlNode =
-                                        JacksonYaml.readTree(
-                                                reader.open(diffEntry.getOldId().toObjectId()).getBytes());
+                                        Jackson.readTree(
+                                                reader.open(diffEntry.getOldId().toObjectId()).getBytes(),
+                                                EntryType.YAML);
                                 final JsonNode newYamlNode =
-                                        JacksonYaml.readTree(
-                                                reader.open(diffEntry.getNewId().toObjectId()).getBytes());
+                                        Jackson.readTree(
+                                                reader.open(diffEntry.getNewId().toObjectId()).getBytes(),
+                                                EntryType.YAML);
                                 patch = JsonPatch.generate(oldYamlNode, newYamlNode, ReplaceMode.SAFE);
 
                                 if (!patch.isEmpty()) {
@@ -822,14 +824,16 @@ class GitRepository implements Repository {
                         switch (newEntryType) {
                             case JSON: {
                                 final JsonNode jsonNode = Jackson.readTree(
-                                        reader.open(diffEntry.getNewId().toObjectId()).getBytes());
+                                        reader.open(diffEntry.getNewId().toObjectId()).getBytes(),
+                                        EntryType.JSON);
 
                                 putChange(changeMap, newPath, Change.ofJsonUpsert(newPath, jsonNode));
                                 break;
                             }
                             case YAML: {
-                                final JsonNode yamlNode = JacksonYaml.readTree(
-                                        reader.open(diffEntry.getNewId().toObjectId()).getBytes());
+                                final JsonNode yamlNode = Jackson.readTree(
+                                        reader.open(diffEntry.getNewId().toObjectId()).getBytes(),
+                                        EntryType.YAML);
 
                                 putChange(changeMap, newPath, Change.ofYamlUpsert(newPath, yamlNode));
                                 break;
@@ -1033,9 +1037,9 @@ class GitRepository implements Repository {
 
                 switch (change.type()) {
                     case UPSERT_JSON: {
-                        final JsonNode oldJsonNode = oldContent != null ? Jackson.readTree(oldContent) : null;
+                        final JsonNode oldJsonNode = Jackson.readTree(oldContent, EntryType.JSON);
                         final JsonNode newJsonNode = firstNonNull((JsonNode) change.content(),
-                                                                  JsonNodeFactory.instance.nullNode());
+                                                                  Jackson.nullNode);
 
                         // Upsert only when the contents are really different.
                         if (!Objects.equals(newJsonNode, oldJsonNode)) {
@@ -1045,9 +1049,9 @@ class GitRepository implements Repository {
                         break;
                     }
                     case UPSERT_YAML: {
-                        final JsonNode oldYamlNode = oldContent != null ? JacksonYaml.readTree(oldContent)
-                                                                        : null;
-                        final JsonNode newYamlNode = firstNonNull((JsonNode) change.content(), null);
+                        final JsonNode oldYamlNode = Jackson.readTree(oldContent, EntryType.YAML);
+                        final JsonNode newYamlNode = firstNonNull((JsonNode) change.content(),
+                                                                  Jackson.nullNode);
 
                         if (!Objects.equals(oldYamlNode, newYamlNode)) {
                             applyPathEdit(dirCache, new InsertYaml(changePath, inserter, newYamlNode));
@@ -1120,13 +1124,7 @@ class GitRepository implements Repository {
                         break;
                     }
                     case APPLY_JSON_PATCH: {
-                        final JsonNode oldJsonNode;
-                        if (oldContent != null) {
-                            oldJsonNode = Jackson.readTree(oldContent);
-                        } else {
-                            oldJsonNode = Jackson.nullNode;
-                        }
-
+                        final JsonNode oldJsonNode = Jackson.readTree(oldContent, EntryType.JSON);
                         final JsonNode newJsonNode;
                         try {
                             newJsonNode = JsonPatch.fromJson((JsonNode) change.content()).apply(oldJsonNode);
@@ -1142,13 +1140,7 @@ class GitRepository implements Repository {
                         break;
                     }
                     case APPLY_YAML_PATCH: {
-                        final JsonNode oldYamlNode;
-                        if (oldContent != null) {
-                            oldYamlNode = JacksonYaml.readTree(oldContent);
-                        } else {
-                            oldYamlNode = JacksonYaml.nullNode;
-                        }
-
+                        final JsonNode oldYamlNode = Jackson.readTree(oldContent, EntryType.YAML);
                         final JsonNode newYamlNode;
                         try {
                             newYamlNode = JsonPatch.fromJson((JsonNode) change.content()).apply(oldYamlNode);
@@ -1724,7 +1716,8 @@ class GitRepository implements Repository {
         @Override
         public void apply(DirCacheEntry ent) {
             try {
-                ent.setObjectId(inserter.insert(Constants.OBJ_BLOB, Jackson.writeValueAsBytes(jsonNode)));
+                ent.setObjectId(inserter.insert(Constants.OBJ_BLOB, Jackson.writeValueAsBytes(jsonNode,
+                                                                                              EntryType.JSON)));
                 ent.setFileMode(FileMode.REGULAR_FILE);
             } catch (IOException e) {
                 throw new StorageException("failed to create a new JSON blob", e);
@@ -1745,7 +1738,8 @@ class GitRepository implements Repository {
         @Override
         public void apply(DirCacheEntry ent) {
             try {
-                ent.setObjectId(inserter.insert(Constants.OBJ_BLOB, JacksonYaml.writeValueAsBytes(yamlNode)));
+                ent.setObjectId(inserter.insert(Constants.OBJ_BLOB, Jackson.writeValueAsBytes(yamlNode,
+                                                                                              EntryType.YAML)));
                 ent.setFileMode(FileMode.REGULAR_FILE);
             } catch (IOException e) {
                 throw new StorageException("failed to create a new YAML blob", e);
