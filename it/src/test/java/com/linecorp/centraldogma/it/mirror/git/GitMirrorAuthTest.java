@@ -45,7 +45,7 @@ import com.jcraft.jsch.KeyPair;
 import com.linecorp.centraldogma.client.CentralDogma;
 import com.linecorp.centraldogma.common.Change;
 import com.linecorp.centraldogma.common.Revision;
-import com.linecorp.centraldogma.internal.Jackson;
+import com.linecorp.centraldogma.internal.jackson.Jackson;
 import com.linecorp.centraldogma.server.CentralDogmaBuilder;
 import com.linecorp.centraldogma.server.MirroringService;
 import com.linecorp.centraldogma.server.storage.project.Project;
@@ -174,7 +174,7 @@ class GitMirrorAuthTest {
             builder.add(Arguments.of(
                     "https",
                     "git+https://" + GIT_HOST + ':' + GIT_PORT_HTTPS + GIT_PATH,
-                    Jackson.readTree(
+                    Jackson.ofJson().readTree(
                             '{' +
                             "  \"type\": \"password\"," +
                             "  \"hostnamePatterns\": [ \"^.*$\" ]," +
@@ -206,7 +206,7 @@ class GitMirrorAuthTest {
                     builder.add(Arguments.of(
                             "ssh",
                             "git+ssh://" + GIT_HOST + ':' + GIT_PORT_SSH + GIT_PATH,
-                            Jackson.readTree(
+                            Jackson.ofJson().readTree(
                                     '{' +
                                     "  \"type\": \"public_key\"," +
                                     "  \"hostnamePatterns\": [ \"^.*$\" ]," +
