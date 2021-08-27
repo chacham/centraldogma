@@ -25,6 +25,7 @@ import java.util.List;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Streams;
 
 /**
  * A merge query on files.
@@ -85,12 +86,50 @@ public interface MergeQuery<T> {
     }
 
     /**
-     * Returns a newly-created {@link MergeQuery} that merges the JSON contents as specified in the
+     * Returns a newly-created {@link MergeQuery} that merges the YAML contents as specified in the
+     * {@code mergeSources}.
+     *
+     * @param mergeSources the paths of YAML files being merged and indicates whether it is optional
+     */
+    static MergeQuery<JsonNode> ofYaml(MergeSource... mergeSources) {
+        return ofYaml(ImmutableList.copyOf(requireNonNull(mergeSources, "mergeSources")));
+    }
+
+    /**
+     * Returns a newly-created {@link MergeQuery} that merges the YAML contents as specified in the
+     * {@code mergeSources}.
+     *
+     * @param mergeSources the paths of YAML files being merged and indicates whether it is optional
+     */
+    static MergeQuery<JsonNode> ofYaml(Iterable<MergeSource> mergeSources) {
+        return new YamlMergeQuery(IDENTITY, mergeSources, ImmutableList.of());
+    }
+
+    /**
+     * Returns a newly-created {@link MergeQuery} that merges the JSON/YAML contents as specified in the
+     * {@code mergeSources}.
+     *
+     * @param mergeSources the paths of JSON/YAML files being merged and indicates whether it is optional
+     */
+    static MergeQuery<JsonNode> ofIdentity(Iterable<MergeSource> mergeSources) {
+        final EntryType entryType = Streams.stream(mergeSources)
+                                           .map(MergeSource::path)
+                                           .map(EntryType::guessFromPath)
+                                           .findFirst()
+                                           .orElse(EntryType.JSON);
+        if (entryType == EntryType.YAML) {
+            return ofYaml(mergeSources);
+        }
+        return ofJson(mergeSources);
+    }
+
+    /**
+     * Returns a newly-created {@link MergeQuery} that merges the JSON/YAML contents as specified in the
      * {@code mergeSources}. Then, the specified expressions are applied to the content of the
      * {@link MergedEntry}.
      *
      * @param type the type of the {@link MergeQuery}
-     * @param mergeSources the paths of JSON files being merged and indicates whether it is optional
+     * @param mergeSources the paths of JSON/YAML files being merged and indicates whether it is optional
      * @param expressions the expressions to apply to the content of the {@link MergedEntry}
      */
     static MergeQuery<?> of(QueryType type, Iterable<MergeSource> mergeSources,
@@ -98,9 +137,10 @@ public interface MergeQuery<T> {
         requireNonNull(type, "type");
         switch (type) {
             case IDENTITY:
-                return ofJson(mergeSources);
+                return ofIdentity(mergeSources);
             case JSON_PATH:
                 return ofJsonPath(mergeSources, expressions);
+            // case YAML_PATH: TODO
             default:
                 throw new IllegalArgumentException("Illegal query type: " + type.name());
         }

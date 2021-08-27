@@ -52,7 +52,7 @@ public final class MergeQueryConverter
     protected com.linecorp.centraldogma.common.MergeQuery<?> doBackward(MergeQuery mergeQuery) {
         switch (mergeQuery.type) {
             case IDENTITY:
-                return com.linecorp.centraldogma.common.MergeQuery.ofJson(convertMergeSources(mergeQuery));
+                return com.linecorp.centraldogma.common.MergeQuery.ofIdentity(convertMergeSources(mergeQuery));
             case JSON_PATH:
                 return com.linecorp.centraldogma.common.MergeQuery.ofJsonPath(convertMergeSources(mergeQuery),
                                                                               mergeQuery.expressions);
